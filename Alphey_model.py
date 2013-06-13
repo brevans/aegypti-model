@@ -1,4 +1,10 @@
 #!/usr/bin/env python
+'''
+An attempt at implementing the model presented in Alphey, et al.
+A model framework to estimate impact and cost of genetics-based
+sterile insect methods for dengue vector control.
+PloS one 6, e25384 (2011).
+'''
 import numpy as np
 from PyDDE import pydde
 import matplotlib.pyplot as plt
@@ -16,91 +22,91 @@ RELEASE_RATIO = 10
 CONTROL_START = 365.0*2
 CONTROL_END = 365.0 * YEARS + CONTROL_START
 
-'''PARAMETERS'''
-'''time steps, 1 day'''
+#PARAMETERS
+#time steps, 1 day
 step = np.empty(RUNS)
 step.fill(1)
 
-'''adult mosqiuto death rate'''
+#adult mosqiuto death rate
 Sigma = np.random.uniform(low = 1/15.0, high = 1/3.0, size=RUNS)
 
-'''Mosquito Generation Time egg->emerging adult'''
+#Mosquito Generation Time egg->emerging adult
 T = np.random.uniform(low = 16.9, high = 20.1, size=RUNS)
 
-'''Daily egg production rate per adult mosquito (a female lays 2E)'''
+#Daily egg production rate per adult mosquito (a female lays 2E)
 E = np.random.uniform(low = 7.0, high = 9.0, size=RUNS)
 
-'''number of offspring produced by each adult per day that will 
-survive to adulthood in the absence of density dependent mortality 
-(i.e. E adjusted for density-independent egg-to-adult survival) 
-estimated value, calculated using field data, depends 
-on value of s (P/s is net reproductive rate)'''
+#number of offspring produced by each adult per day that will 
+#survive to adulthood in the absence of density dependent mortality 
+#(i.e. E adjusted for density-independent egg-to-adult survival) 
+#estimated value, calculated using field data, depends 
+#on value of s (P/s is net reproductive rate)
 P = np.random.uniform(low = 7.0, high = 9.0, size=RUNS)
 
-'''Average number of vectors (adult female mosquitoes) per host, 
-initial pop is N_0'''
+#Average number of vectors (adult female mosquitoes) per host, 
+#initial pop is N_0
 k = np.random.uniform(low = 0.3, high = 20, size=RUNS)
 
-'''Strength of larval density dependence'''
+#Strength of larval density dependence
 Beta = np.random.uniform(low = 0.302, high = 1.5, size=RUNS)
 
-'''breeding site multiplier'''
+#breeding site multiplier
 Alpha = np.log(P / Sigma) / (2 * k * N_0 * E ) ** Beta
 
-'''Maintained ratio of RIDL males to pre-release equilibrium number of \
-adult males (constant release policy)'''
+#Maintained ratio of RIDL males to pre-release equilibrium number of 
+#adult males (constant release policy)
 C = np.empty(RUNS)
 C.fill(RELEASE_RATIO)
 
-'''Human per capita birth rate (per day) Equal to human death rate'''
+#Human per capita birth rate (per day) Equal to human death rate
 v = np.random.uniform(low = 1/(60*365.0), high = 1/(68*365.0), size=RUNS)
 
-'''Human per capita birth rate (per day)'''
+#Human per capita birth rate (per day)
 Mu = v
 
-'''biting rate (number of bites per mosquito per day)'''
+#biting rate (number of bites per mosquito per day)
 b = np.random.uniform(low = 0.33, high = 1.0, size=RUNS)
 
-'''Proportion of bites that successfully infect a susceptible human'''
+#Proportion of bites that successfully infect a susceptible human
 a = np.random.uniform(low = 0.25, high = 0.75, size=RUNS)
 
-'''Proportion of bites that successfully infect a susceptible mosquito'''
+#Proportion of bites that successfully infect a susceptible mosquito
 c = np.random.uniform(low = 0.25, high = 0.75, size=RUNS)
 
-'''Virus latent period in humans (days) Intrinsic incubation period'''
+#Virus latent period in humans (days) Intrinsic incubation period
 Tau = np.random.uniform(low = 3.0, high = 12.0, size=RUNS)
 
-'''Virus latent period in vectors (days) Extrinsic incubation period'''
+#Virus latent period in vectors (days) Extrinsic incubation period
 Omega = np.random.uniform(low = 7.0, high = 14.0, size=RUNS)
 
-'''Human recovery rate (per day) 1/infectious period'''
+#Human recovery rate (per day) 1/infectious period
 Gamma = np.random.uniform(low = 1/10.0, high = 1/2.0, size=RUNS)
 
-'''Rate at which humans lose cross-immunity (per day)'''
+#Rate at which humans lose cross-immunity (per day)
 Psi = np.random.uniform(low = 1/(365*5/12.0), high = 1/(365*2/12.0), size=RUNS)
 
-'''Increased host susceptibility due to ADE'''
+#Increased host susceptibility due to ADE
 Chi = np.random.uniform(low = 1.0, high = 3.0, size=RUNS)
 
-'''Alternative to Chi, Increased transmissibility due to ADE'''
+#Alternative to Chi, Increased transmissibility due to ADE
 Zeta = np.empty(RUNS)
 Zeta.fill(1)
 
-'''Proportion of hosts that recover from secondary infection 
-(1-Rho die from DHF/DSS)'''
+#Proportion of hosts that recover from secondary infection 
+(1-Rho die from DHF/DSS)
 Rho = np.random.uniform(low = 0.9935, high = 1, size=RUNS)
 
-'''Stable equilibrium of pre-release mosquito population'''
+#Stable equilibrium of pre-release mosquito population
 F_star = ((1/Alpha * np.log(P / Sigma)) ** 1/Beta) / 2 * E
 
 
-'''Name the variable indexes for sanity in coding the model... Will make
-c[1] and c[_T], for example, synonymous'''
+#Name the variable indexes for sanity in coding the model... Will make
+p[1] and p[_T], for example, synonymous
 (_step, _Sigma, _T, _E, _P, _k, _Beta, _Alpha, _C, _v, _Mu, _b, _a, _c, 
  _Tau, _Omega, _Gamma, _Psi, _Chi, _Zeta, _Rho, _F_star) = range(NUMPARAMS)
 
-'''Name the variable indexes for sanity in coding the model... Will make
-s[1] and s[_T], for example, synonymous'''
+#Name the variable indexes for sanity in coding the model... Will make
+#s[1] and s[_T], for example, synonymous
 (_F, _X, _Y_i, _Y_j, _Y_ij, _Y_ji, _N, _S, _I_i, _I_j, _C_i, 
  _C_j, _R_i, _R_j, _I_ij, _I_ji, _R) = range(NUMSTATEVARS)
 
@@ -108,10 +114,10 @@ s[1] and s[_T], for example, synonymous'''
 params = np.vstack((step, Sigma, T, E, P, k, Beta, Alpha, C, v, Mu, b, a, c, 
                    Tau, Omega, Gamma, Psi, Chi, Zeta, Rho, F_star)).T
 
-def ddehist(g, s, c, t):
+def ddehist(g, s, p, t):
     return(s, g)
 
-def RIDL_dde(s, c, t):
+def RIDL_dde(s, p, t):
     '''STATE VARIABLES
     MOSQUITOS
     F: Total number of female vectors
@@ -127,17 +133,18 @@ def RIDL_dde(s, c, t):
     ( I_ij, I_ji ) Secondary infection with serotype j, following primary infection with serotype i
     R:   Recovered from secondary infection, immune to all serotypes
     '''
-    print(s, c, t)
-    F_prev = pydde.pastvalue(_F, t - c[_step] , 0)
+    print(s, p, t)
+    F_prev = pydde.pastvalue(_F, t - p[_step] , 0)
 
-    '''modified equation S1'''
+    #modified equation S1
     if t <= CONTROL_START:
         C_tilde = 0
     else:
-        C_tilde = c[_C]
+        C_tilde = p[_C]
 
-    F_now = (c[_P] * F_prev * (F_prev / (F_prev+C_tilde*c[_F_star])) * 
-             np.exp(-c[_Alpha] * (2*c[_E]*F_prev) ** c[_Beta] ) - c[_Sigma] * s[_F] )
+    F_now = (p[_P] * F_prev * (F_prev / (F_prev + C_tilde * p[_F_star])) * 
+     np.exp(-p[_Alpha] * (2*p[_E]*F_prev) ** p[_Beta] ) - p[_Sigma] * s[_F] )
+    
     print(F_now)
     return np.array([F_now])
 '''

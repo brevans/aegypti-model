@@ -93,7 +93,7 @@ Zeta = np.empty(RUNS)
 Zeta.fill(1)
 
 #Proportion of hosts that recover from secondary infection 
-(1-Rho die from DHF/DSS)
+#(1-Rho die from DHF/DSS)
 Rho = np.random.uniform(low = 0.9935, high = 1, size=RUNS)
 
 #Stable equilibrium of pre-release mosquito population
@@ -101,7 +101,7 @@ F_star = ((1/Alpha * np.log(P / Sigma)) ** 1/Beta) / 2 * E
 
 
 #Name the variable indexes for sanity in coding the model... Will make
-p[1] and p[_T], for example, synonymous
+#p[1] and p[_T], for example, synonymous
 (_step, _Sigma, _T, _E, _P, _k, _Beta, _Alpha, _C, _v, _Mu, _b, _a, _c, 
  _Tau, _Omega, _Gamma, _Psi, _Chi, _Zeta, _Rho, _F_star) = range(NUMPARAMS)
 
@@ -122,16 +122,19 @@ def RIDL_dde(s, p, t):
     MOSQUITOS
     F: Total number of female vectors
     X: Suceptible female vectors
-    ( Y_i, Y_j, Y_ij, Y_ji )infectious with serotype j, i or first one then the other
+    ( Y_i, Y_j, Y_ij, Y_ji ) infectious with serotype j, i or first one then
+                             the other
 
     HUMANS
     N:   Total number of hosts
     S:   Suceptible to all serotypes
-    ( I_i, I_j ):  Primary infection with serotype i or j
-    ( C_i, C_j ):  Recovered from primary infection with serotype i or j, temporarily cross-imune
-    ( R_i, R_j ):  Recovered from serotype i, suceptible to all other types
-    ( I_ij, I_ji ) Secondary infection with serotype j, following primary infection with serotype i
-    R:   Recovered from secondary infection, immune to all serotypes
+    ( I_i, I_j ):   Primary infection with serotype i or j
+    ( C_i, C_j ):   Recovered from primary infection with serotype i or j,
+                    temporarily cross-imune
+    ( R_i, R_j ):   Recovered from serotype i, suceptible to all other types
+    ( I_ij, I_ji ): Secondary infection with serotype j, following primary
+                    infection with serotype i
+    R:              Recovered from secondary infection, immune to all serotypes
     '''
     print(s, p, t)
     F_prev = pydde.pastvalue(_F, t - p[_step] , 0)
@@ -147,6 +150,7 @@ def RIDL_dde(s, p, t):
     
     print(F_now)
     return np.array([F_now])
+
 '''
 ae_dde.initproblem(no_vars = 1, no_cons = NUMPARAMS, nlag = 1, nsw=0, t0 = 0,
                    t1 = CONTROL_START+CONTROL_END, initstate = np.array([10]), c = params[1,:],

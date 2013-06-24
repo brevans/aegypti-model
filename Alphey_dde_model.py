@@ -210,8 +210,8 @@ def RIDL_dde(Y, t, p):
          - (s[_N] * p[_Mu]))
 
     state = np.array([F, X, Yi, Yj, S, Ii, Ij, Ci, Cj, Ri, Rj, Iij, Iji, R, N])
-    print ('t:{}, F0:{}, X0:{}, S0:{}, R0:{}, N0:{}'.format(
-        t, s[_F], s[_X], s[_S], s[_R], s[_N]))
+    #print ('t:{}, F0:{}, X0:{}, S0:{}, R0:{}, N0:{}'.format(
+    #    t, s[_F], s[_X], s[_S], s[_R], s[_N]))
     return state
 
 p = params[0, :]
@@ -229,11 +229,10 @@ print("")
 g = lambda t : start_state
 
 tt = np.linspace(0, CONTROL_END, CONTROL_END*DT, endpoint=True)
-
 yy = dde.ddeint(RIDL_dde, g, tt, fargs=(p, ))
 
 f, axarr = plt.subplots(len(s_names), sharex=True)
 for i, varname in enumerate(s_names):
-    axarr[i].plot(tt, yy[:,i])
+    axarr[i].plot(tt[int(CONTROL_START-180):], yy[int(CONTROL_START-180):,i])
     axarr[i].set_title(varname)
 plt.show()

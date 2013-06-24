@@ -15,12 +15,12 @@ RUNS = 100
 NUMPARAMS = 22
 NUMSTATEVARS = 15
 
-N0 = 1000000.0
+N0 = 10000.0
 CONTROL_YEARS = 1
-PRE_CONTROL_YEARS = 200
+PRE_CONTROL_YEARS = 10
 DT = 1.0
 RELEASE_RATIO = 10
-CONTROL_START = 365.0*PRE_CONTROL_YEARS
+CONTROL_START = 365.0 * PRE_CONTROL_YEARS
 CONTROL_END = 365.0 * CONTROL_YEARS + CONTROL_START
 
 #PARAMETERS
@@ -145,7 +145,7 @@ def RIDL_dde(Y, t, p):
     if t <= CONTROL_START:
         C_tilde = 0
     else:
-        C_tilde = C
+        C_tilde = p[_C]
 
     F = ((p[_P] * ds[_F]) * (ds[_F] / (ds[_F] + C_tilde * p[_F_star])) * 
             np.exp(-(p[_Alpha] * (2*p[_E]*ds[_F]) ** p[_Beta] )) - 
@@ -191,15 +191,17 @@ def RIDL_dde(Y, t, p):
            ts[_Rj] * ts[_Yi] / ts[_N] - s[_Iji] * (p[_Gamma] + p[_Mu]))
 
     #equation 9
-    R = (p[_Rho]*p[_Gamma]*(s[_Iij] + s[_Iji])) - p[_Mu] * s[_R]
+    R = (p[_Rho] * p[_Gamma] * (s[_Iij] + s[_Iji])) - p[_Mu] * s[_R]
 
     #equation 10
-    N = (p[_v] * s[_N] - ((1-p[_Rho]) * p[_Gamma] * (s[_Iij] + s[_Iji]))
-         - s[_N] * p[_Mu])
+    N = ((s[_N] * p[_v]) - ((1-p[_Rho]) * p[_Gamma] * (s[_Iij] + s[_Iji]))
+         - (s[_N] * p[_Mu]))
 
     state = np.array([F, X, Yi, Yj, S, Ii, Ij, Ci, Cj, Ri, Rj, Iij, Iji, R, N])
-    print 't:{}. F:{}, S:{}, R:{}, N:{}'.format(
-        t, state[_F], state[_S], state[_R], state[_N])
+    print ('t:{}, F:{}, S:{}, R:{}, N:{}'.format(
+        t, state[_F], state[_S], state[_R], state[_N]))
+    print ('F0:{}, S0:{}, R0:{}, N0:{}\n'.format(
+        s[_F], s[_S], s[_R], s[_N]))
     return state
 
 p_names = ["dt", "Sigma", "T", "E", "P", "k", "Beta", "Alpha", "C",
@@ -224,6 +226,7 @@ print("")
 g = lambda t : start_state
 
 tt = np.linspace(0, CONTROL_END, CONTROL_END*DT, endpoint=True)
+
 yy = dde.ddeint(RIDL_dde, g, tt, fargs=(p, ))
 
 plt.plot(tt, yy)

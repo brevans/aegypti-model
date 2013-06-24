@@ -15,13 +15,20 @@ RUNS = 100
 NUMPARAMS = 22
 NUMSTATEVARS = 15
 
-N0 = 10000.0
+N0 = 1000000.0
 CONTROL_YEARS = 1
-PRE_CONTROL_YEARS = 10
+PRE_CONTROL_YEARS = 2
 DT = 1.0
-RELEASE_RATIO = 10
+RELEASE_RATIO = 1
 CONTROL_START = 365.0 * PRE_CONTROL_YEARS
 CONTROL_END = 365.0 * CONTROL_YEARS + CONTROL_START
+
+p_names = ["dt", "Sigma", "T", "E", "P", "k", "Beta", "Alpha", "C",
+           "v", "Mu", "b", "a", "c", "Tau", "Omega", "Gamma", "Psi",
+           "Chi", "Zeta", "Rho", "F_star"]
+
+s_names = ["F", "X", "Yi", "Yj", "S", "Ii", "Ij", "Ci", "Cj", "Ri",
+          "Rj", "Iij", "Iji", "R", "N"]
 
 #PARAMETERS
 #time step
@@ -100,7 +107,6 @@ Rho = np.random.uniform(low = 0.9935, high = 1, size=RUNS)
 #Stable equilibrium of pre-release mosquito population
 F_star = ((1/Alpha * np.log(P / Sigma)) ** 1/Beta) / 2 * E
 
-
 #Name the variable indexes for sanity in coding the model... Will make
 #p[1] and p[_T], for example, synonymous
 (_dt, _Sigma, _T, _E, _P, _k, _Beta, _Alpha, _C, _v, _Mu, _b, _a, _c, 
@@ -146,17 +152,23 @@ def RIDL_dde(Y, t, p):
         C_tilde = 0
     else:
         C_tilde = p[_C]
-
-    F = ((p[_P] * ds[_F]) * (ds[_F] / (ds[_F] + C_tilde * p[_F_star])) * 
-            np.exp(-(p[_Alpha] * (2*p[_E]*ds[_F]) ** p[_Beta] )) - 
-            p[_Sigma] * s[_F] )
+        
+    if s[_F] < .001:
+        F = 0.0
+    else:
+        F = ((p[_P] * ds[_F]) * (ds[_F] / (ds[_F] + C_tilde * p[_F_star])) * 
+                np.exp(-(p[_Alpha] * (2*p[_E]*ds[_F]) ** p[_Beta] )) - 
+                p[_Sigma] * s[_F] )
     
-    #equation 2    
-    X = ((p[_P] * ds[_F]) * (ds[_F] / (ds[_F] + C_tilde * p[_F_star])) * 
-            np.exp(-(p[_Alpha] * (2*p[_E]*ds[_F]) ** p[_Beta] )) - 
-            p[_c] * p[_b] * s[_X] / s[_N] *
-            (s[_Ii] + s[_Ij] + p[_Zeta] * s[_Iij] + p[_Zeta] * s[_Iji])
-            - p[_Sigma] * s[_X] )
+    #equation 2
+    if s[_X] < .001:
+        X = 0.0
+    else:
+        X = ((p[_P] * ds[_F]) * (ds[_F] / (ds[_F] + C_tilde * p[_F_star])) * 
+                np.exp(-(p[_Alpha] * (2*p[_E]*ds[_F]) ** p[_Beta] )) - 
+                p[_c] * p[_b] * s[_X] / s[_N] *
+                (s[_Ii] + s[_Ij] + p[_Zeta] * s[_Iij] + p[_Zeta] * s[_Iji])
+                - p[_Sigma] * s[_X] )
     
     #equation 3
     Yj = np.exp(-p[_Sigma] * p[_Omega]) * ((p[_c] * os[_X] / os[_N]) *
@@ -198,22 +210,13 @@ def RIDL_dde(Y, t, p):
          - (s[_N] * p[_Mu]))
 
     state = np.array([F, X, Yi, Yj, S, Ii, Ij, Ci, Cj, Ri, Rj, Iij, Iji, R, N])
-    print ('t:{}, F:{}, S:{}, R:{}, N:{}'.format(
-        t, state[_F], state[_S], state[_R], state[_N]))
-    print ('F0:{}, S0:{}, R0:{}, N0:{}\n'.format(
-        s[_F], s[_S], s[_R], s[_N]))
+    print ('t:{}, F0:{}, X0:{}, S0:{}, R0:{}, N0:{}'.format(
+        t, s[_F], s[_X], s[_S], s[_R], s[_N]))
     return state
 
-p_names = ["dt", "Sigma", "T", "E", "P", "k", "Beta", "Alpha", "C",
-           "v", "Mu", "b", "a", "c", "Tau", "Omega", "Gamma", "Psi",
-           "Chi", "Zeta", "Rho", "F_star"]
-
-s_names = ["F", "X", "Yi", "Yj", "S", "Ii", "Ij", "Ci", "Cj", "Ri",
-          "Rj", "Iij", "Iji", "R", "N"]
-
 p = params[0, :]
-start_state = np.array([N0, 0.0, 0.0, 0.0, N0, 
-                        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, N0])
+start_state = np.array([N0, N0, 0.0, 0.0, N0, 
+                        1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, N0])
 
 print("Parameters")
 for i, j in zip(p_names, p):
@@ -229,5 +232,8 @@ tt = np.linspace(0, CONTROL_END, CONTROL_END*DT, endpoint=True)
 
 yy = dde.ddeint(RIDL_dde, g, tt, fargs=(p, ))
 
-plt.plot(tt, yy)
+f, axarr = plt.subplots(len(s_names), sharex=True)
+for i, varname in enumerate(s_names):
+    axarr[i].plot(tt, yy[:,i])
+    axarr[i].set_title(varname)
 plt.show()

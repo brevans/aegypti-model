@@ -220,10 +220,10 @@ start_state = np.array([N0, N0, 0.0, 0.0, N0,
 
 print("Parameters")
 for i, j in zip(p_names, p):
-    print(i, j, )
+    print('{}: {}'.format(i, j))
 print("\nStarting values")
 for i, j in zip(s_names, start_state):
-    print(i, j, )
+    print('{}: {}'.format(i, j))
 print("")
 
 g = lambda t : start_state

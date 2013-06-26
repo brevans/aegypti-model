@@ -5,25 +5,29 @@ A model framework to estimate impact and cost of genetics-based
 sterile insect methods for dengue vector control.
 PloS one 6, e25384 (2011).
 '''
+#from itertools import cycle
 import numpy as np
 import matplotlib.pyplot as plt
 import dde
 
 np.set_printoptions(suppress=True, precision=6, linewidth=280)
+np.seterr(all='raise')
 
-RUNS = 100
-NUMPARAMS = 22
+RUNS = 7
+NUMPARAMS = 21
 NUMSTATEVARS = 15
 
 N0 = 1000000.0
 CONTROL_YEARS = 1
-PRE_CONTROL_YEARS = 2
+PRE_CONTROL_YEARS = 10
+POST_CONTROL_YEARS = 3
 DT = 1.0
 RELEASE_RATIO = 10
 CONTROL_START = 365.0 * PRE_CONTROL_YEARS
 CONTROL_END = 365.0 * CONTROL_YEARS + CONTROL_START
+SIMULATION_END =  365.0 * POST_CONTROL_YEARS + CONTROL_END 
 
-p_names = ["dt", "Sigma", "T", "E", "P", "k", "Beta", "Alpha", "C",
+p_names = ["Sigma", "T", "E", "P", "k", "Beta", "Alpha", "C",
            "v", "Mu", "b", "a", "c", "Tau", "Omega", "Gamma", "Psi",
            "Chi", "Zeta", "Rho", "F_star"]
 
@@ -31,10 +35,6 @@ s_names = ["F", "X", "Yi", "Yj", "S", "Ii", "Ij", "Ci", "Cj", "Ri",
           "Rj", "Iij", "Iji", "R", "N"]
 
 #PARAMETERS
-#time step
-dt = np.empty(RUNS)
-dt.fill(DT)
-
 #adult mosqiuto death rate
 Sigma = np.random.uniform(low = 1/15.0, high = 1/3.0, size=RUNS)
 
@@ -109,13 +109,13 @@ F_star = ((1/Alpha * np.log(P / Sigma)) ** 1/Beta) / 2 * E
 
 #Name the variable indexes for sanity in coding the model... Will make
 #p[1] and p[_T], for example, synonymous
-(_dt, _Sigma, _T, _E, _P, _k, _Beta, _Alpha, _C, _v, _Mu, _b, _a, _c, 
+(_Sigma, _T, _E, _P, _k, _Beta, _Alpha, _C, _v, _Mu, _b, _a, _c, 
  _Tau, _Omega, _Gamma, _Psi, _Chi, _Zeta, _Rho, _F_star) = range(NUMPARAMS)
 
 (_F, _X, _Yi, _Yj, _S, _Ii, _Ij, _Ci, _Cj, _Ri, _Rj, 
  _Iij, _Iji, _R, _N) = range(NUMSTATEVARS)
 
-params = np.vstack((dt, Sigma, T, E, P, k, Beta, Alpha, C, v, Mu, b, a, c, 
+params = np.vstack((Sigma, T, E, P, k, Beta, Alpha, C, v, Mu, b, a, c, 
                    Tau, Omega, Gamma, Psi, Chi, Zeta, Rho, F_star)).T
 
 def RIDL_dde(Y, t, p):
@@ -214,25 +214,57 @@ def RIDL_dde(Y, t, p):
     #    t, s[_F], s[_X], s[_S], s[_R], s[_N]))
     return state
 
-p = params[0, :]
 start_state = np.array([N0, N0, 0.0, 0.0, N0, 
-                        1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, N0])
+                        0.01*N0, 0.01*N0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, N0])
 
-print("Parameters")
-for i, j in zip(p_names, p):
-    print('{}: {}'.format(i, j))
+g = lambda t : start_state
+
+tt = np.linspace(0, SIMULATION_END, SIMULATION_END*DT, endpoint=True)
+yys = []
+
 print("\nStarting values")
 for i, j in zip(s_names, start_state):
     print('{}: {}'.format(i, j))
 print("")
 
-g = lambda t : start_state
+good_runs = []
+for r in range(RUNS):
+    par = params[r, :]
+    print("Parameters for run {}:".format(r))
+    for i, j in zip(p_names, par):
+        print('{}: {}'.format(i, j))
+    print("")
+    try:
+        yys.append(dde.ddeint(RIDL_dde, g, tt, fargs=(par, )))
+        good_runs.append(r)
+    except FloatingPointError:
+        continue
 
-tt = np.linspace(0, CONTROL_END, CONTROL_END*DT, endpoint=True)
-yy = dde.ddeint(RIDL_dde, g, tt, fargs=(p, ))
+gr = len(good_runs)
+if gr >= 1:
+    vars_to_graph = [_F, _Yi, _S, _Ii, _Ri, _Iij, _R, _N]
+    num_vars = len(vars_to_graph)
+    f, axarr = plt.subplots(num_vars)
+    graph_start = int(CONTROL_START - 300)
+    graph_end = int(CONTROL_END + 180)
 
-f, axarr = plt.subplots(len(s_names), sharex=True)
-for i, varname in enumerate(s_names):
-    axarr[i].plot(tt[int(CONTROL_START-180):], yy[int(CONTROL_START-180):,i])
-    axarr[i].set_title(varname)
-plt.show()
+    for i, v in enumerate(vars_to_graph):
+        #lines = ["-","--","-.",":"]
+        #linecycler = cycle(lines)
+        yy = np.array([y[graph_start:graph_end, v] for y in yys])
+        axarr[i].plot(tt[graph_start:graph_end], yy.T,
+                      #linestyle = next(linecycler)
+                      )
+        axarr[i].set_xlim(graph_start, graph_end)
+        axarr[i].axvline(CONTROL_START, color='black')
+        if i+1 != num_vars:
+            axarr[i].set_xticks([])
+        else:
+            axarr[i].set_xlabel('Days')
+
+        axarr[i].set_ylabel(s_names[v], rotation='horizontal')
+        axarr[i].yaxis.set_label_position("right")
+
+    plt.figlegend(labels=('Run_{}'.format(x) for x in good_runs),
+                  handles= axarr[-1].get_lines(), loc=1)
+    plt.show()

@@ -1,21 +1,64 @@
 #!/usr/bin/env python
 '''
+Alphey_dde_model:
 An attempt at implementing the model presented in Alphey, et al.
 A model framework to estimate impact and cost of genetics-based
 sterile insect methods for dengue vector control.
 PloS one 6, e25384 (2011).
+
+You need numpy, scipy, and matplotlib installed for this to work.
+
+Usage:
+    Alphey_dde_model.py [-r 10] [-c 10] [-t .5] [-b 20] [-a 10]
+
+Options:
+    -r, --runs=num           Number of runs to simulate the release.  The first 
+                              run will always be the parameters used in the 
+                              manuscript. [default: 1]
+    -c, --releaseratio=num   Release ratio, relative to the natural mosquito 
+                              population of the RIDL mosquitoes [default: 10]
+    -n, --initialpop=num     The initial size of the human population 
+                              [default: 100000]
+    -t, --releasetime=num    The ammount of time to stage the release in years 
+                              [default: 0.5]
+    -b, --timebefore=num     The ammount of time to wait before the release 
+                              starts in years [default: 50]
+    -a, --timeafter=num      The ammount of time to continue the simulation 
+                              after the release in years [default: 10]
+
 '''
-#from itertools import cycle
+import sys
+from os import path
+
+#try to download docopt if you don't have it, in a 2 or 3 compatible way
+try:
+    from docopt import docopt
+except ImportError:
+    #yay for the weirdness that is urllib in 2&3
+    try:
+        from urllib.request import urlopen
+    except ImportError:
+        from urllib import urlopen
+    r = urlopen('https://raw.github.com/docopt/docopt/master/docopt.py')
+    docopt_raw = r.read()
+    docopt_out = open(path.join(path.dirname(path.abspath(sys.argv[0])),
+                                'docopt.py'), 'w')
+    docopt_out.write(docopt_raw.decode())
+    docopt_out.close()
+    from docopt import docopt
 import numpy as np
 import matplotlib.pyplot as plt
 import dde
 
-NUMPARAMS = 21
+#hard-coded to force myself to pay attention to parameters and state variables
+NUMPARAMS = 23
 NUMSTATEVARS = 15
+
 #Name the variable indexes for sanity in coding the model... Will make
 #p[1] and p[_T], for example, synonymous
 (_Sigma, _T, _E, _P, _k, _Beta, _Alpha, _C, _v, _Mu, _b, _a, _c, 
- _Tau, _Omega, _Gamma, _Psi, _Chi, _Zeta, _Rho, _F_star) = range(NUMPARAMS)
+ _Tau, _Omega, _Gamma, _Psi, _Chi, _Zeta, _Rho, _F_star, 
+ _c_start, _c_end) = range(NUMPARAMS)
 
 (_F, _X, _Yi, _Yj, _S, _Ii, _Ij, _Ci, _Cj, _Ri, _Rj, 
  _Iij, _Iji, _R, _N) = range(NUMSTATEVARS)
@@ -23,90 +66,12 @@ NUMSTATEVARS = 15
 #the names of the state variables and parameters
 p_names = ["Sigma", "T", "E", "P", "k", "Beta", "Alpha", "C",
            "v", "Mu", "b", "a", "c", "Tau", "Omega", "Gamma", "Psi",
-           "Chi", "Zeta", "Rho", "F_star"]
+           "Chi", "Zeta", "Rho", "F_star", "Control_start", "Control_end"]
 
 s_names = ["F", "X", "Yi", "Yj", "S", "Ii", "Ij", "Ci", "Cj", "Ri",
           "Rj", "Iij", "Iji", "R", "N"]
 
-
-def params():
-    #PARAMETERS
-    #adult mosqiuto death rate
-    Sigma = np.random.uniform(low = 1/15.0, high = 1/3.0, size=RUNS)
-
-    #Mosquito Generation Time egg->emerging adult
-    T = np.random.uniform(low = 16.9, high = 20.1, size=RUNS)
-
-    #Daily egg production rate per adult mosquito (a female lays 2E)
-    E = np.random.uniform(low = 7.0, high = 9.0, size=RUNS)
-
-    #number of offspring produced by each adult per day that will 
-    #survive to adulthood in the absence of density dependent mortality 
-    #(i.e. E adjusted for density-independent egg-to-adult survival) 
-    #estimated value, calculated using field data, depends 
-    #on value of s (P/s is net reproductive rate)
-    P = np.random.uniform(low = 7.0, high = 9.0, size=RUNS)
-
-    #Average number of vectors (adult female mosquitoes) per host, 
-    #initial pop is N0
-    k = np.random.uniform(low = 0.3, high = 20, size=RUNS)
-
-    #Strength of larval density dependence
-    Beta = np.random.uniform(low = 0.302, high = 1.5, size=RUNS)
-
-    #breeding site multiplier
-    Alpha = np.log(P / Sigma) / (2 * k * N0 * E ) ** Beta
-
-    #Maintained ratio of RIDL males to pre-release equilibrium number of 
-    #adult males (constant release policy)
-    C = np.empty(RUNS)
-    C.fill(RELEASE_RATIO)
-
-    #Human per capita birth rate (per day) Equal to human death rate
-    v = np.random.uniform(low = 1/(60*365.0), high = 1/(68*365.0), size=RUNS)
-
-    #Human per capita birth rate (per day)
-    Mu = v
-
-    #biting rate (number of bites per mosquito per day)
-    b = np.random.uniform(low = 0.33, high = 1.0, size=RUNS)
-
-    #Proportion of bites that successfully infect a susceptible human
-    a = np.random.uniform(low = 0.25, high = 0.75, size=RUNS)
-
-    #Proportion of bites that successfully infect a susceptible mosquito
-    c = np.random.uniform(low = 0.25, high = 0.75, size=RUNS)
-
-    #Virus latent period in humans (days) Intrinsic incubation period
-    Tau = np.random.uniform(low = 3.0, high = 12.0, size=RUNS)
-
-    #Virus latent period in vectors (days) Extrinsic incubation period
-    Omega = np.random.uniform(low = 7.0, high = 14.0, size=RUNS)
-
-    #Human recovery rate (per day) 1/infectious period
-    Gamma = np.random.uniform(low = 1/10.0, high = 1/2.0, size=RUNS)
-
-    #Rate at which humans lose cross-immunity (per day)
-    Psi = np.random.uniform(low = 1/(365*5/12.0), high = 1/(365*2/12.0), size=RUNS)
-
-    #Increased host susceptibility due to ADE
-    Chi = np.random.uniform(low = 1.0, high = 3.0, size=RUNS)
-
-    #Alternative to Chi, Increased transmissibility due to ADE
-    Zeta = np.empty(RUNS)
-    Zeta.fill(1)
-
-    #Proportion of hosts that recover from secondary infection 
-    #(1-Rho die from DHF/DSS)
-    Rho = np.random.uniform(low = 0.9935, high = 1, size=RUNS)
-
-    #Stable equilibrium of pre-release mosquito population
-    F_star = ((1/Alpha * np.log(P / Sigma)) ** 1/Beta) / 2 * E
-
-    return np.vstack((Sigma, T, E, P, k, Beta, Alpha, C, v, Mu, b, a, c, 
-                       Tau, Omega, Gamma, Psi, Chi, Zeta, Rho, F_star)).T
-
-def original_params():
+def original_params(release_ratio, c_start, c_end):
     '''Returns the parameters used in the manuscript as an array
     '''
     Sigma = 1/14.0
@@ -116,7 +81,7 @@ def original_params():
     k = 2.0
     Beta = 1.0
     Alpha = 1.5e-8
-    C = RELEASE_RATIO
+    C = release_ratio
     v = 1/(60*365.0)
     Mu = 1/(60*365.0)
     b = 0.5
@@ -132,7 +97,98 @@ def original_params():
     F_star = ((1/Alpha * np.log(P / Sigma)) ** 1/Beta) / 2 * E
 
     return np.array([Sigma, T, E, P, k, Beta, Alpha, C, v, Mu, b, a, c, Tau,
-                     Omega, Gamma, Psi, Chi, Zeta, Rho, F_star])
+                     Omega, Gamma, Psi, Chi, Zeta, Rho, F_star, c_start, 
+                     c_end]).T
+
+def generate_params(runs, release_ratio, N0, c_start, c_end):
+
+    original = original_params(release_ratio, c_start, c_end)
+    if runs == 1:
+        return original
+    else:
+        runs = runs - 1
+
+    #PARAMETERS
+    #adult mosqiuto death rate
+    Sigma = np.random.uniform(low = 1/15.0, high = 1/3.0, size=runs)
+
+    #Mosquito Generation Time egg->emerging adult
+    T = np.random.uniform(low = 16.9, high = 20.1, size=runs)
+
+    #Daily egg production rate per adult mosquito (a female lays 2E)
+    E = np.random.uniform(low = 7.0, high = 9.0, size=runs)
+
+    #number of offspring produced by each adult per day that will 
+    #survive to adulthood in the absence of density dependent mortality 
+    #(i.e. E adjusted for density-independent egg-to-adult survival) 
+    #estimated value, calculated using field data, depends 
+    #on value of s (P/s is net reproductive rate)
+    P = np.random.uniform(low = 7.0, high = 9.0, size=runs)
+
+    #Average number of vectors (adult female mosquitoes) per host, 
+    #initial pop is N0
+    k = np.random.uniform(low = 0.3, high = 20, size=runs)
+
+    #Strength of larval density dependence
+    Beta = np.random.uniform(low = 0.302, high = 1.5, size=runs)
+
+    #breeding site multiplier
+    Alpha = np.log(P / Sigma) / (2 * k * N0 * E ) ** Beta
+
+    #Maintained ratio of RIDL males to pre-release equilibrium number of 
+    #adult males (constant release policy)
+    C = np.empty(runs).fill(release_ratio)
+
+    #Human per capita birth rate (per day) Equal to human death rate
+    v = np.random.uniform(low = 1/(60*365.0), high = 1/(68*365.0), size=runs)
+
+    #Human per capita birth rate (per day)
+    Mu = v
+
+    #biting rate (number of bites per mosquito per day)
+    b = np.random.uniform(low = 0.33, high = 1.0, size=runs)
+
+    #Proportion of bites that successfully infect a susceptible human
+    a = np.random.uniform(low = 0.25, high = 0.75, size=runs)
+
+    #Proportion of bites that successfully infect a susceptible mosquito
+    c = np.random.uniform(low = 0.25, high = 0.75, size=runs)
+
+    #Virus latent period in humans (days) Intrinsic incubation period
+    Tau = np.random.uniform(low = 3.0, high = 12.0, size=runs)
+
+    #Virus latent period in vectors (days) Extrinsic incubation period
+    Omega = np.random.uniform(low = 7.0, high = 14.0, size=runs)
+
+    #Human recovery rate (per day) 1/infectious period
+    Gamma = np.random.uniform(low = 1/10.0, high = 1/2.0, size=runs)
+
+    #Rate at which humans lose cross-immunity (per day)
+    Psi = np.random.uniform(low = 1/(365*5/12.0), high = 1/(365*2/12.0),
+                            size=runs)
+
+    #Increased host susceptibility due to ADE
+    Chi = np.random.uniform(low = 1.0, high = 3.0, size=runs)
+
+    #Alternative to Chi, increased transmissibility due to ADE
+    Zeta = np.ones(runs)
+
+    #Proportion of hosts that recover from secondary infection 
+    #(1-Rho die from DHF/DSS)
+    Rho = np.random.uniform(low = 0.9935, high = 1, size=runs)
+
+    #Stable equilibrium of pre-release mosquito population
+    F_star = ((1/Alpha * np.log(P / Sigma)) ** 1/Beta) / 2 * E
+
+    #start and stop of control effort, in days
+    control_start = np.empty(runs).fill(c_start)
+    control_end = np.empty(runs).fill(c_end)
+
+    sampled = np.vstack((Sigma, T, E, P, k, Beta, Alpha, C, v, Mu, b, a, c, 
+                       Tau, Omega, Gamma, Psi, Chi, Zeta, Rho, F_star, 
+                       control_start, control_end)).T
+
+    return np.vstack(original, sampled)
 
 def RIDL_dde(Y, t, p):
     '''
@@ -157,7 +213,7 @@ def RIDL_dde(Y, t, p):
                     temporarily cross-imune
     Ri, Rj:   Recovered from serotype i, suceptible to all other types
     Iij, Iji: Secondary infection with other serotype
-    R:              Recovered from secondary infection, immune to all serotypes
+    R:        Recovered from secondary infection, immune to all serotypes
     '''
     #state variables at time t
     s = [x if x > .001 else 0 for x in  Y(t)]
@@ -171,10 +227,10 @@ def RIDL_dde(Y, t, p):
     #state variables at time t - tau delay (inrinsic incubation period)
     ts = [x if x > .001 else 0 for x in Y(t-p[_Tau])]
 
-    #equation 1
-    if t <= CONTROL_START:
+    #control switch
+    if t <= p[_c_start]:
         C_tilde = 0
-    elif t <= CONTROL_END and t >= CONTROL_START:
+    elif t <= p[_c_end] and t >= p[_c_start]:
         C_tilde = p[_C]
     else:
         C_tilde = 0
@@ -239,83 +295,78 @@ def RIDL_dde(Y, t, p):
     state = np.array([F, X, Yi, Yj, S, Ii, Ij, Ci, Cj, Ri, Rj, Iij, Iji, R, N])
     return state
 
-np.set_printoptions(suppress=True, precision=6, linewidth=280)
-np.seterr(all='raise')
+def main():
+    np.set_printoptions(suppress=True, precision=6, linewidth=280)
+    np.seterr(all='raise')
+    args = docopt(__doc__)
 
-RUNS = 1
+    runs = int(args['--runs'])
 
-N0 = 1000000.0
-CONTROL_YEARS = 1
-PRE_CONTROL_YEARS = 50
-POST_CONTROL_YEARS = 20
-DT = 1.0
-RELEASE_RATIO = 10
-CONTROL_START = 365.0 * PRE_CONTROL_YEARS
-CONTROL_END = 365.0 * CONTROL_YEARS + CONTROL_START
-SIMULATION_END =  365.0 * POST_CONTROL_YEARS + CONTROL_END 
+    N0 = float(args['--initialpop'])
+    control_years = float(args['--releasetime'])
+    pre_control_years = float(args['--timebefore'])
+    post_control_years = float(args['--timeafter'])
+    dt = 1.0
+    release_ratio = float(args['--releaseratio'])
+    control_start = 365.0 * pre_control_years
+    control_end = 365.0 * control_years + control_start
+    simulation_end =  365.0 * post_control_years + control_end 
 
-start_state = np.array([N0, N0, 0.0, 0.0, N0, 
-                        0.01*N0, 0.01*N0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, N0])
-print("\nStarting values")
-for i, j in zip(s_names, start_state):
-    print('{}: {}'.format(i, j))
-print("")
+    start_state = np.array([N0, N0, 0.0, 0.0, N0, 0.01*N0, 0.01*N0,
+                            0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, N0])
 
-g = lambda t : start_state
-
-tt = np.linspace(0, SIMULATION_END, SIMULATION_END*DT, endpoint=True)
-yys = []
-
-params = np.vstack((original_params().T, params()))
-
-good_runs = []
-for r in range(RUNS):
-    par = params[r, :]
-    print("Parameters for run {}:".format(r))
-    for i, j in zip(p_names, par):
+    print("\nStarting values")
+    for i, j in zip(s_names, start_state):
         print('{}: {}'.format(i, j))
     print("")
-    #only keep runs where the solver completes successfully
-    #try:
-    #    yys.append(dde.ddeint(RIDL_dde, g, tt, fargs=(par, )))
-    #    good_runs.append(r)
-    #except FloatingPointError:
-    #    continue  
-    yys.append(dde.ddeint(RIDL_dde, g, tt, fargs=(par, )))
-    good_runs.append(r)
 
-out = open('last_parameters.csv', 'w')
-out.write(','.join(p_names)+'\n')
-for r in good_runs:
-    out.write(','.join(str(x) for x in params[r, :])+'\n')
-out.close()
+    g = lambda t : start_state
+    tt = np.linspace(0, simulation_end, simulation_end*dt, endpoint=True)
+    yys = []
+    parameters = generate_params(runs, release_ratio, N0, control_start, 
+                                 control_end)
 
-gr = len(good_runs)
-if gr >= 1:
-    vars_to_graph = [_F, _Yi, _S, _Ii, _Ri, _Iij, _R, _N]
-    num_vars = len(vars_to_graph)
-    f, axarr = plt.subplots(num_vars)
-    graph_start = 0#int(CONTROL_START - 300)
-    graph_end = int(SIMULATION_END)
+    finished_runs = []
+    for r in range(runs):
+        par = parameters[r, :]
+        print("Parameters for run {}:".format(r))
+        for i, j in zip(p_names, par):
+            print('{}: {}'.format(i, j))
+        print("")
+        yys.append(dde.ddeint(RIDL_dde, g, tt, fargs=(par, )))
+        finished_runs.append(r)
 
-    for i, v in enumerate(vars_to_graph):
-        #lines = ["-","--","-.",":"]
-        #linecycler = cycle(lines)
-        yy = np.array([y[graph_start:graph_end, v] for y in yys])
-        axarr[i].plot(tt[graph_start:graph_end], yy.T,
-                      #linestyle = next(linecycler)
-                      )
-        axarr[i].set_xlim(graph_start, graph_end)
-        axarr[i].axvline(CONTROL_START, color='black')
-        axarr[i].axvline(CONTROL_END, color='black')
-        if i+1 != num_vars:
-            axarr[i].set_xticks([])
-        else:
-            axarr[i].set_xlabel('Days')
+    out = open('run_parameters.csv', 'w')
+    out.write(','.join(p_names)+'\n')
+    for r in finished_runs:
+        out.write(','.join(str(x) for x in parameters[r, :])+'\n')
+    out.close()
 
-        axarr[i].set_ylabel(s_names[v], rotation='horizontal')
-        axarr[i].yaxis.set_label_position("right")
+    gr = len(finished_runs)
+    if gr >= 1:
+        vars_to_graph = [_F, _Yi, _S, _Ii, _Ri, _Iij, _R, _N]
+        num_vars = len(vars_to_graph)
+        f, axarr = plt.subplots(num_vars)
+        graph_start = 0#int(control_start - 300)
+        graph_end = int(simulation_end)
 
-    plt.figlegend(labels=('Run_{}'.format(x) for x in good_runs),
-                  handles= axarr[-1].get_lines(), loc=1)
-    plt.show()
+        for i, v in enumerate(vars_to_graph):
+            yy = np.array([y[graph_start:graph_end, v] for y in yys])
+            axarr[i].plot(tt[graph_start:graph_end], yy.T)
+            axarr[i].set_xlim(graph_start, graph_end)
+            axarr[i].axvline(control_start, color='black')
+            axarr[i].axvline(control_end, color='black')
+            if i+1 != num_vars:
+                axarr[i].set_xticks([])
+            else:
+                axarr[i].set_xlabel('Days')
+
+            axarr[i].set_ylabel(s_names[v], rotation='horizontal')
+            axarr[i].yaxis.set_label_position("right")
+
+        plt.figlegend(labels=('Run_{}'.format(x) for x in finished_runs),
+                      handles= axarr[-1].get_lines(), loc=1)
+        plt.show()
+
+if __name__ == '__main__':
+    main()

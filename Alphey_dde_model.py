@@ -6,10 +6,10 @@ A model framework to estimate impact and cost of genetics-based
 sterile insect methods for dengue vector control.
 PloS one 6, e25384 (2011).
 
-You need numpy, scipy, and matplotlib installed for this to work.
+You need numpy, scipy(v 0.11 only), and matplotlib installed for this to work.
 
 Usage:
-    Alphey_dde_model.py [-r 10] [-c 10] [-t .5] [-b 20] [-a 10]
+    Alphey_dde_model.py [-r 10] [-c 10] [-t .5] [-b 20] [-a 10] [-n 10000000]
 
 Options:
     -r, --runs=num           Number of runs to simulate the release.  The first 
@@ -18,7 +18,7 @@ Options:
     -c, --releaseratio=num   Release ratio, relative to the natural mosquito 
                               population of the RIDL mosquitoes [default: 10]
     -n, --initialpop=num     The initial size of the human population 
-                              [default: 100000]
+                              [default: 1000000]
     -t, --releasetime=num    The ammount of time to stage the release in years 
                               [default: 0.5]
     -b, --timebefore=num     The ammount of time to wait before the release 
@@ -328,7 +328,7 @@ def main():
 
     finished_runs = []
     for r in range(runs):
-        par = parameters[r, :]
+        par = parameters if (runs==1) else parameters[r, :]
         print("Parameters for run {}:".format(r))
         for i, j in zip(p_names, par):
             print('{}: {}'.format(i, j))

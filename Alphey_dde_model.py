@@ -7,24 +7,33 @@ sterile insect methods for dengue vector control.
 PloS one 6, e25384 (2011).
 
 You need numpy, scipy(v 0.11 only), and matplotlib installed for this to work.
+You can specify some of the starting conditions via the command line, or just
+run something like what's described in the paper by default.
 
 Usage:
     Alphey_dde_model.py [-r 10] [-c 10] [-t .5] [-b 20] [-a 10] [-n 10000000]
 
+Usage:
+    Alphey_dde_model.py [-r 10] [-c 1] [-o 249] [-t 1] [-b 250] [-a 10] 
+                        [-i 50000]
 Options:
     -r, --runs=num           Number of runs to simulate the release.  The first 
                               run will always be the parameters used in the 
                               manuscript. [default: 1]
     -c, --releaseratio=num   Release ratio, relative to the natural mosquito 
                               population of the RIDL mosquitoes [default: 10]
+    -o, --outbreak=num       The time the outbreak starts [default: 29]
     -n, --initialpop=num     The initial size of the human population 
                               [default: 1000000]
     -t, --releasetime=num    The ammount of time to stage the release in years 
                               [default: 0.5]
     -b, --timebefore=num     The ammount of time to wait before the release 
-                              starts in years [default: 50]
+                              starts in years [default: 30]
     -a, --timeafter=num      The ammount of time to continue the simulation 
                               after the release in years [default: 10]
+    -i, --initialpop=num     The initial human population size [default: 100000]
+
+    -h, --help               Show this message
 
 '''
 import sys
@@ -51,14 +60,14 @@ import matplotlib.pyplot as plt
 import dde
 
 #hard-coded to force myself to pay attention to parameters and state variables
-NUMPARAMS = 23
+NUMPARAMS = 24
 NUMSTATEVARS = 15
 
 #Name the variable indexes for sanity in coding the model... Will make
 #p[1] and p[_T], for example, synonymous
 (_Sigma, _T, _E, _P, _k, _Beta, _Alpha, _C, _v, _Mu, _b, _a, _c, 
  _Tau, _Omega, _Gamma, _Psi, _Chi, _Zeta, _Rho, _F_star, 
- _c_start, _c_end) = range(NUMPARAMS)
+ _c_start, _c_end, _o_start) = range(NUMPARAMS)
 
 (_F, _X, _Yi, _Yj, _S, _Ii, _Ij, _Ci, _Cj, _Ri, _Rj, 
  _Iij, _Iji, _R, _N) = range(NUMSTATEVARS)
@@ -66,12 +75,13 @@ NUMSTATEVARS = 15
 #the names of the state variables and parameters
 p_names = ["Sigma", "T", "E", "P", "k", "Beta", "Alpha", "C",
            "v", "Mu", "b", "a", "c", "Tau", "Omega", "Gamma", "Psi",
-           "Chi", "Zeta", "Rho", "F_star", "Control_start", "Control_end"]
+           "Chi", "Zeta", "Rho", "F_star", "Control_start", "Control_end",
+           "Outbreak_start"]
 
 s_names = ["F", "X", "Yi", "Yj", "S", "Ii", "Ij", "Ci", "Cj", "Ri",
           "Rj", "Iij", "Iji", "R", "N"]
 
-def original_params(release_ratio, c_start, c_end):
+def original_params(release_ratio, N0, c_start, c_end, otime):
     '''Returns the parameters used in the manuscript as an array
     '''
     Sigma = 1/14.0
@@ -80,7 +90,8 @@ def original_params(release_ratio, c_start, c_end):
     P = 0.7
     k = 2.0
     Beta = 1.0
-    Alpha = 1.5e-8
+    #Alpha = 1.5e-8
+    Alpha = np.log(P / Sigma) / ((2 * k * N0 * E ) ** Beta)
     C = release_ratio
     v = 1/(60*365.0)
     Mu = 1/(60*365.0)
@@ -98,11 +109,11 @@ def original_params(release_ratio, c_start, c_end):
 
     return np.array([Sigma, T, E, P, k, Beta, Alpha, C, v, Mu, b, a, c, Tau,
                      Omega, Gamma, Psi, Chi, Zeta, Rho, F_star, c_start, 
-                     c_end]).T
+                     c_end, otime]).T
 
-def generate_params(runs, release_ratio, N0, c_start, c_end):
+def generate_params(runs, release_ratio, N0, c_start, c_end, otime):
 
-    original = original_params(release_ratio, c_start, c_end)
+    original = original_params(release_ratio, N0, c_start, c_end, otime)
     if runs == 1:
         return original
     else:
@@ -123,7 +134,7 @@ def generate_params(runs, release_ratio, N0, c_start, c_end):
     #(i.e. E adjusted for density-independent egg-to-adult survival) 
     #estimated value, calculated using field data, depends 
     #on value of s (P/s is net reproductive rate)
-    P = np.random.uniform(low = 7.0, high = 9.0, size=runs)
+    P = np.random.uniform(low = 0.2, high = 0.7, size=runs)
 
     #Average number of vectors (adult female mosquitoes) per host, 
     #initial pop is N0
@@ -133,11 +144,12 @@ def generate_params(runs, release_ratio, N0, c_start, c_end):
     Beta = np.random.uniform(low = 0.302, high = 1.5, size=runs)
 
     #breeding site multiplier
-    Alpha = np.log(P / Sigma) / (2 * k * N0 * E ) ** Beta
+    Alpha = np.log(P / Sigma) / ((2 * k * N0 * E ) ** Beta)
 
     #Maintained ratio of RIDL males to pre-release equilibrium number of 
     #adult males (constant release policy)
-    C = np.empty(runs).fill(release_ratio)
+    C = np.empty(runs)
+    C.fill(release_ratio)
 
     #Human per capita birth rate (per day) Equal to human death rate
     v = np.random.uniform(low = 1/(60*365.0), high = 1/(68*365.0), size=runs)
@@ -152,7 +164,7 @@ def generate_params(runs, release_ratio, N0, c_start, c_end):
     a = np.random.uniform(low = 0.25, high = 0.75, size=runs)
 
     #Proportion of bites that successfully infect a susceptible mosquito
-    c = np.random.uniform(low = 0.25, high = 0.75, size=runs)
+    c = np.random.uniform(low = 0.20, high = 0.75, size=runs)
 
     #Virus latent period in humans (days) Intrinsic incubation period
     Tau = np.random.uniform(low = 3.0, high = 12.0, size=runs)
@@ -178,17 +190,40 @@ def generate_params(runs, release_ratio, N0, c_start, c_end):
     Rho = np.random.uniform(low = 0.9935, high = 1, size=runs)
 
     #Stable equilibrium of pre-release mosquito population
-    F_star = ((1/Alpha * np.log(P / Sigma)) ** 1/Beta) / 2 * E
+    F_star = ((1/Alpha * np.log(P / Sigma)) ** (1/Beta)) / 2 * E
 
     #start and stop of control effort, in days
-    control_start = np.empty(runs).fill(c_start)
-    control_end = np.empty(runs).fill(c_end)
+    control_start = np.empty(runs)
+    control_start.fill(c_start)
+    control_end = np.empty(runs)
+    control_end.fill(c_end)
+
+    #time of outbreak
+    outbreak = np.empty(runs)
+    outbreak.fill(otime)
 
     sampled = np.vstack((Sigma, T, E, P, k, Beta, Alpha, C, v, Mu, b, a, c, 
                        Tau, Omega, Gamma, Psi, Chi, Zeta, Rho, F_star, 
-                       control_start, control_end)).T
+                       control_start, control_end, outbreak)).T
 
-    return np.vstack(original, sampled)
+    return np.vstack((original, sampled))
+
+def generate_start_states(p, n):
+    
+    if len(p.shape) == 1:
+        z=0.0
+        sstates = np.array([n, n, z, z, n, z, 
+                           z, z, z, z, z, z, z, z, n])
+    else:
+        runs = p.shape[0]
+        #fstar = p[:, _F_star].reshape(runs,1)
+        N0 = np.empty(runs).reshape(runs,1)
+        N0.fill(n)
+        z = np.zeros(runs).reshape(runs,1)
+        sstates = np.hstack((N0, N0, z, z, N0, N0*.01,
+                            N0*.01, z, z, z, z, z, z, z, N0))
+
+    return sstates
 
 def RIDL_dde(Y, t, p):
     '''
@@ -244,7 +279,7 @@ def RIDL_dde(Y, t, p):
                 p[_Sigma] * s[_F] )
     
     #equation 2
-    if ds[_F] == 0:
+    if ds[_X] == 0:
         X = 0
     else:
         X = ((p[_P] * ds[_F]) * (ds[_F] / (ds[_F] + C_tilde * p[_F_star])) * 
@@ -264,10 +299,14 @@ def RIDL_dde(Y, t, p):
         (s[_S] * (s[_Yi] + s[_Yj]))/s[_N] ) - p[_Mu] * s[_S] )
 
     #equation 5
-    Ii = (np.exp(-p[_Mu] * p[_Tau]) * (p[_a] * p[_b]) *
-          (ts[_S] * ts[_Yi] / ts[_N]) - s[_Ii] * (p[_Gamma] + p[_Mu]))
-    Ij = (np.exp(-p[_Mu] * p[_Tau]) * (p[_a] * p[_b]) *
-          (ts[_S] * ts[_Yj] / ts[_N]) - s[_Ij] * (p[_Gamma] + p[_Mu]))
+    if t >= p[_o_start] and t <= p[_o_start]+2.0:
+        Ii = 10.0
+        Ij = 10.0
+    else:
+        Ii = (np.exp(-p[_Mu] * p[_Tau]) * (p[_a] * p[_b]) *
+              (ts[_S] * ts[_Yi] / ts[_N]) - s[_Ii] * (p[_Gamma] + p[_Mu]))
+        Ij = (np.exp(-p[_Mu] * p[_Tau]) * (p[_a] * p[_b]) *
+              (ts[_S] * ts[_Yj] / ts[_N]) - s[_Ij] * (p[_Gamma] + p[_Mu]))
 
     #equation 6
     Ci = p[_Gamma] * s[_Ii] - s[_Ci] * (p[_Psi] + p[_Mu])
@@ -295,51 +334,63 @@ def RIDL_dde(Y, t, p):
     state = np.array([F, X, Yi, Yj, S, Ii, Ij, Ci, Cj, Ri, Rj, Iij, Iji, R, N])
     return state
 
-def main():
-    np.set_printoptions(suppress=True, precision=6, linewidth=280)
-    np.seterr(all='raise')
-    args = docopt(__doc__)
-
-    runs = int(args['--runs'])
-
-    N0 = float(args['--initialpop'])
-    control_years = float(args['--releasetime'])
-    pre_control_years = float(args['--timebefore'])
-    post_control_years = float(args['--timeafter'])
-    dt = 1.0
-    release_ratio = float(args['--releaseratio'])
-    control_start = 365.0 * pre_control_years
-    control_end = 365.0 * control_years + control_start
-    simulation_end =  365.0 * post_control_years + control_end 
-
-    start_state = np.array([N0, N0, 0.0, 0.0, N0, 0.01*N0, 0.01*N0,
-                            0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, N0])
-
-    print("\nStarting values")
-    for i, j in zip(s_names, start_state):
+def zip_p(a, b):
+    for i, j in zip(a, b):
         print('{}: {}'.format(i, j))
     print("")
 
-    g = lambda t : start_state
+def print_run_info(s, p, r):
+    print("Starting State for run {}:".format(r))
+    zip_p(s_names, s)
+    print("Parameters for run {}:".format(r))
+    zip_p(p_names, p)
+
+def main():
+    np.set_printoptions(suppress=True, precision=10)
+    np.seterr(all='raise')
+    args = docopt(__doc__)
+    runs = int(args['--runs'])
+
+    N0 = float(args['--initialpop'])
+    outbreak_start = 365 * float(args['--outbreak'])
+    control_years = float(args['--releasetime'])
+    pre_control_years = float(args['--timebefore'])
+    post_control_years = float(args['--timeafter'])
+    release_ratio = float(args['--releaseratio'])
+    control_start = 365.0 * pre_control_years
+    control_end = 365.0 * control_years + control_start
+    simulation_end =  365.0 * post_control_years + control_end
+    dt = 1.0
+
     tt = np.linspace(0, simulation_end, simulation_end*dt, endpoint=True)
     yys = []
     parameters = generate_params(runs, release_ratio, N0, control_start, 
-                                 control_end)
+                                 control_end, outbreak_start)
+    start_states = generate_start_states(parameters, N0)
 
     finished_runs = []
     for r in range(runs):
-        par = parameters if (runs==1) else parameters[r, :]
-        print("Parameters for run {}:".format(r))
-        for i, j in zip(p_names, par):
-            print('{}: {}'.format(i, j))
-        print("")
-        yys.append(dde.ddeint(RIDL_dde, g, tt, fargs=(par, )))
-        finished_runs.append(r)
+        #states for this run
+        ss = start_states if runs == 1 else start_states[r, :]
+        #history Function
+        g = lambda t : ss
+        #parameters for this run
+        par = parameters if runs == 1 else parameters[r, :]
+        print_run_info(ss, par, r)
+        try:
+            yys.append(dde.ddeint(RIDL_dde, g, tt, fargs=(par, )))
+        except FloatingPointError as err:
+            print "RUN {} FAILED: {}".format(r, err)
+        else:
+            finished_runs.append(r)
 
     out = open('run_parameters.csv', 'w')
     out.write(','.join(p_names)+'\n')
-    for r in finished_runs:
-        out.write(','.join(str(x) for x in parameters[r, :])+'\n')
+    if len(finished_runs) == 1:
+        out.write(','.join(str(x) for x in parameters)+'\n')
+    else:
+        for r in finished_runs:
+            out.write(','.join(str(x) for x in parameters[r, :])+'\n')
     out.close()
 
     gr = len(finished_runs)
@@ -354,8 +405,10 @@ def main():
             yy = np.array([y[graph_start:graph_end, v] for y in yys])
             axarr[i].plot(tt[graph_start:graph_end], yy.T)
             axarr[i].set_xlim(graph_start, graph_end)
-            axarr[i].axvline(control_start, color='black')
-            axarr[i].axvline(control_end, color='black')
+            y_lim = axarr[i].get_ybound()
+            axarr[i].set_ylim(0, y_lim[1])
+            axarr[i].axvline(control_start, color='black', linestyle='--')
+            axarr[i].axvline(control_end, color='black', linestyle='--')
             if i+1 != num_vars:
                 axarr[i].set_xticks([])
             else:

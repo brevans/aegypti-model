@@ -28,7 +28,7 @@ class ddeVar:
         self.itpr.x = np.hstack([self.itpr.x,  [t]])
         Y2 = Y if (Y.size==1) else np.array([Y]).T
         self.itpr.y = np.hstack([self.itpr.y,  Y2])
-        #self.itpr._y = np.hstack([self.itpr.y,  Y2])
+        self.itpr._y = self.itpr._reshape_yi(self.itpr.y)
         self.itpr.fill_value = Y
          
          

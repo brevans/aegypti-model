@@ -6,12 +6,9 @@ A model framework to estimate impact and cost of genetics-based
 sterile insect methods for dengue vector control.
 PloS one 6, e25384 (2011).
 
-You need numpy, scipy(v 0.11 only), and matplotlib installed for this to work.
+You need numpy, scipy, and matplotlib installed for this to work.
 You can specify some of the starting conditions via the command line, or just
 run something like what's described in the paper by default.
-
-Usage:
-    Alphey_dde_model.py [-r 10] [-c 10] [-t .5] [-b 20] [-a 10] [-n 10000000]
 
 Usage:
     Alphey_dde_model.py [-r 10] [-c 1] [-o 249] [-t 1] [-b 250] [-a 10] 

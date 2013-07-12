@@ -18,16 +18,16 @@ Options:
                               run will always be the parameters used in the 
                               manuscript. [default: 1]
     -c, --releaseratio=num   Release ratio, relative to the natural mosquito 
-                              population of the RIDL mosquitoes [default: 10]
-    -o, --outbreak=num       The time the outbreak starts [default: 29]
+                              population of the RIDL mosquitoes [default: 1]
+    -o, --outbreak=num       The time the outbreak starts [default: 4.5]
     -n, --initialpop=num     The initial size of the human population 
                               [default: 1000000]
     -t, --releasetime=num    The ammount of time to stage the release in years 
-                              [default: 0.5]
+                              [default: 1]
     -b, --timebefore=num     The ammount of time to wait before the release 
-                              starts in years [default: 30]
+                              starts in years [default: 5]
     -a, --timeafter=num      The ammount of time to continue the simulation 
-                              after the release in years [default: 10]
+                              after the release in years [default: 5]
     -i, --initialpop=num     The initial human population size [default: 100000]
 
     -h, --help               Show this message
@@ -57,14 +57,14 @@ import matplotlib.pyplot as plt
 import dde
 
 #hard-coded to force myself to pay attention to parameters and state variables
-NUMPARAMS = 24
+NUMPARAMS = 25
 NUMSTATEVARS = 15
 
 #Name the variable indexes for sanity in coding the model... Will make
 #p[1] and p[_T], for example, synonymous
 (_Sigma, _T, _E, _P, _k, _Beta, _Alpha, _C, _v, _Mu, _b, _a, _c, 
  _Tau, _Omega, _Gamma, _Psi, _Chi, _Zeta, _Rho, _F_star, 
- _c_start, _c_end, _o_start) = range(NUMPARAMS)
+ _c_start, _c_end, _o_start, _o_alert) = range(NUMPARAMS)
 
 (_F, _X, _Yi, _Yj, _S, _Ii, _Ij, _Ci, _Cj, _Ri, _Rj, 
  _Iij, _Iji, _R, _N) = range(NUMSTATEVARS)
@@ -103,10 +103,11 @@ def original_params(release_ratio, N0, c_start, c_end, otime):
     Zeta = 1
     Rho = 0.9999
     F_star = ((1/Alpha * np.log(P / Sigma)) ** 1/Beta) / 2 * E
+    o_alert = 0
 
     return np.array([Sigma, T, E, P, k, Beta, Alpha, C, v, Mu, b, a, c, Tau,
                      Omega, Gamma, Psi, Chi, Zeta, Rho, F_star, c_start, 
-                     c_end, otime]).T
+                     c_end, otime, o_alert]).T
 
 def generate_params(runs, release_ratio, N0, c_start, c_end, otime):
 
@@ -199,9 +200,13 @@ def generate_params(runs, release_ratio, N0, c_start, c_end, otime):
     outbreak = np.empty(runs)
     outbreak.fill(otime)
 
+    #notification of outbreak
+    out_alert = np.empty(runs)
+    out_alert.fill(0.0)
+
     sampled = np.vstack((Sigma, T, E, P, k, Beta, Alpha, C, v, Mu, b, a, c, 
                        Tau, Omega, Gamma, Psi, Chi, Zeta, Rho, F_star, 
-                       control_start, control_end, outbreak)).T
+                       control_start, control_end, outbreak, out_alert)).T
 
     return np.vstack((original, sampled))
 
@@ -214,11 +219,11 @@ def generate_start_states(p, n):
     else:
         runs = p.shape[0]
         #fstar = p[:, _F_star].reshape(runs,1)
-        N0 = np.empty(runs).reshape(runs,1)
-        N0.fill(n)
+        n0 = np.empty(runs).reshape(runs,1)
+        n0.fill(n)
         z = np.zeros(runs).reshape(runs,1)
-        sstates = np.hstack((N0, N0, z, z, N0, N0*.01,
-                            N0*.01, z, z, z, z, z, z, z, N0))
+        sstates = np.hstack((n0, n0, z, z, n0, z,
+                            z, z, z, z, z, z, z, z, n0))
 
     return sstates
 
@@ -258,7 +263,6 @@ def RIDL_dde(Y, t, p):
 
     #state variables at time t - tau delay (inrinsic incubation period)
     ts = [x if x > .001 else 0 for x in Y(t-p[_Tau])]
-
     #control switch
     if t <= p[_c_start]:
         C_tilde = 0
@@ -266,12 +270,31 @@ def RIDL_dde(Y, t, p):
         C_tilde = p[_C]
     else:
         C_tilde = 0
-    
+
+    #equation 5
+    if t >= p[_o_start] and t <= p[_o_start]+max([p[_Omega], p[_Tau]]):
+        s[_Ii] = 10.0
+        os[_Ii] = 10.0
+        ts[_Ii] = 10.0
+
+        s[_Ij] = 10.0
+        os[_Ij] = 10.0
+        ts[_Ij] = 10.0
+        if p[_o_alert] == 0.0:
+            print("Outbreak Started at {}".format(t))
+            p[_o_alert] = 1.0
+
+    Ii = (np.exp(-p[_Mu] * p[_Tau]) * (p[_a] * p[_b]) *
+          (ts[_S] * ts[_Yi] / ts[_N]) - s[_Ii] * (p[_Gamma] + p[_Mu]))
+    Ij = (np.exp(-p[_Mu] * p[_Tau]) * (p[_a] * p[_b]) *
+          (ts[_S] * ts[_Yj] / ts[_N]) - s[_Ij] * (p[_Gamma] + p[_Mu]))
+
     #equation 1
     if ds[_F] == 0:
         F = 0
     else:
-        F = ((p[_P] * ds[_F]) * (ds[_F] / (ds[_F] + C_tilde * p[_F_star])) * 
+        #F = ((p[_P] * ds[_F]) * (ds[_F] / (ds[_F] + C_tilde * p[_F_star])) * 
+        F = ((p[_P] * ds[_F]) * (ds[_F] / (ds[_F] + C_tilde * p[_k] * s[_N])) * 
                 np.exp(-(p[_Alpha] * (2*p[_E]*ds[_F]) ** p[_Beta] )) - 
                 p[_Sigma] * s[_F] )
     
@@ -294,16 +317,6 @@ def RIDL_dde(Y, t, p):
     #equation 4
     S = ( p[_v] * s[_N] - (p[_a] * p[_b] * 
         (s[_S] * (s[_Yi] + s[_Yj]))/s[_N] ) - p[_Mu] * s[_S] )
-
-    #equation 5
-    if t >= p[_o_start] and t <= p[_o_start]+2.0:
-        Ii = 10.0
-        Ij = 10.0
-    else:
-        Ii = (np.exp(-p[_Mu] * p[_Tau]) * (p[_a] * p[_b]) *
-              (ts[_S] * ts[_Yi] / ts[_N]) - s[_Ii] * (p[_Gamma] + p[_Mu]))
-        Ij = (np.exp(-p[_Mu] * p[_Tau]) * (p[_a] * p[_b]) *
-              (ts[_S] * ts[_Yj] / ts[_N]) - s[_Ij] * (p[_Gamma] + p[_Mu]))
 
     #equation 6
     Ci = p[_Gamma] * s[_Ii] - s[_Ci] * (p[_Psi] + p[_Mu])
@@ -334,12 +347,11 @@ def RIDL_dde(Y, t, p):
 def zip_p(a, b):
     for i, j in zip(a, b):
         print('{}: {}'.format(i, j))
-    print("")
 
 def print_run_info(s, p, r):
-    print("Starting State for run {}:".format(r))
+    print("\n##Starting State for run {}:".format(r))
     zip_p(s_names, s)
-    print("Parameters for run {}:".format(r))
+    print("##Parameters for run {}:".format(r))
     zip_p(p_names, p)
 
 def main():
@@ -377,7 +389,7 @@ def main():
         try:
             yys.append(dde.ddeint(RIDL_dde, g, tt, fargs=(par, )))
         except FloatingPointError as err:
-            print "RUN {} FAILED: {}".format(r, err)
+            print("RUN {} FAILED: {}".format(r, err))
         else:
             finished_runs.append(r)
 
@@ -392,7 +404,7 @@ def main():
 
     gr = len(finished_runs)
     if gr >= 1:
-        vars_to_graph = [_F, _Yi, _S, _Ii, _Ri, _Iij, _R, _N]
+        vars_to_graph = [_F, _Yi, _S, _Ii, _Ri, _Iij, _R]
         num_vars = len(vars_to_graph)
         f, axarr = plt.subplots(num_vars)
         graph_start = 0#int(control_start - 300)

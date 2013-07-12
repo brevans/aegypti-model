@@ -75,5 +75,5 @@ def ddeint(func, g, tt, fargs=None):
     dde_ = dde(func)
     dde_.set_initial_value(ddeVar(g, tt[0]))
     dde_.set_f_params(fargs)
-    return np.array([g(tt[0])]+[dde_.integrate(dde_.t + dt)
-                                for dt in np.diff(tt)])
+    return np.array([g(tt[0])]+
+                    [dde_.integrate(dde_.t + dt) for dt in np.diff(tt)])

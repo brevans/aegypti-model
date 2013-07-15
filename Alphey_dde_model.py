@@ -419,7 +419,7 @@ def main():
             axarr[i].axvline(control_start, color='black', linestyle='--')
             axarr[i].axvline(control_end, color='black', linestyle='--')
             if i+1 != num_vars:
-                axarr[i].set_xticks([])
+                axarr[i].set_xticklabels([])
             else:
                 axarr[i].set_xlabel('Days')
 

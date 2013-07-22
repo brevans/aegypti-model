@@ -47,6 +47,8 @@ class dde(scipy.integrate.ode):
         def f2(t, y, args):
             return f(self.Y, t, *args)
         scipy.integrate.ode.__init__(self, f2, jac)
+        #attempt to emulate ode23s from matlab
+        self.set_integrator('vode', method='bdf', order=15, nsteps=3000)
         self.set_f_params(None)
          
   

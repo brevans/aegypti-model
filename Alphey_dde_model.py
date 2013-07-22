@@ -102,7 +102,7 @@ def original_params(release_ratio, N0, c_start, c_end, otime):
     Chi = 1.5
     Zeta = 1
     Rho = 0.9999
-    F_star = ((1/Alpha * np.log(P / Sigma)) ** 1/Beta) / 2 * E
+    F_star = ((1/Alpha * np.log(P / Sigma)) ** 1/Beta) / (2 * E)
     o_alert = 0
 
     return np.array([Sigma, T, E, P, k, Beta, Alpha, C, v, Mu, b, a, c, Tau,
@@ -188,7 +188,7 @@ def generate_params(runs, release_ratio, N0, c_start, c_end, otime):
     Rho = np.random.uniform(low = 0.9935, high = 1, size=runs)
 
     #Stable equilibrium of pre-release mosquito population
-    F_star = ((1/Alpha * np.log(P / Sigma)) ** (1/Beta)) / 2 * E
+    F_star = ((1/Alpha * np.log(P / Sigma)) ** (1/Beta)) / (2 * E)
 
     #start and stop of control effort, in days
     control_start = np.empty(runs)
@@ -293,8 +293,7 @@ def RIDL_dde(Y, t, p):
     if ds[_F] == 0:
         F = 0
     else:
-        #F = ((p[_P] * ds[_F]) * (ds[_F] / (ds[_F] + C_tilde * p[_F_star])) * 
-        F = ((p[_P] * ds[_F]) * (ds[_F] / (ds[_F] + C_tilde * p[_k] * s[_N])) * 
+        F = ((p[_P] * ds[_F]) * (ds[_F] / (ds[_F] + C_tilde * p[_F_star])) * 
                 np.exp(-(p[_Alpha] * (2*p[_E]*ds[_F]) ** p[_Beta] )) - 
                 p[_Sigma] * s[_F] )
     
@@ -428,6 +427,8 @@ def main():
 
         plt.figlegend(labels=('Run_{}'.format(x) for x in finished_runs),
                       handles= axarr[-1].get_lines(), loc=1)
+        plt.savefig('fig.pdf', orientation='landscape', papertype='letter', 
+                    transparent=True, format='pdf')
         plt.show()
 
 if __name__ == '__main__':
